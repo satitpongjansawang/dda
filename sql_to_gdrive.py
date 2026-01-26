@@ -37,6 +37,12 @@ class Config:
     SQL_PASSWORD = os.getenv('SQL_PASSWORD', 'your_password')
     SQL_DRIVER = os.getenv('SQL_DRIVER', '{ODBC Driver 17 for SQL Server}')
 
+    # Document search settings
+    # AUTO_NO_CHR: Document prefix (e.g., 'ITSEQ') - searches documents starting with this prefix
+    # AUTO_NO: Specific document number (e.g., 'ITSEQ-2601-00002') - for recovery mode
+    AUTO_NO_CHR = os.getenv('AUTO_NO_CHR', 'ITSEQ')
+    AUTO_NO = os.getenv('AUTO_NO', '')  # Empty means use AUTO_NO_CHR mode
+
     # File paths
     BASE_FILE_PATH = os.getenv('BASE_FILE_PATH', r'C:\Myapp\DASY-FLII\WEB-INF\AppendFiles')
 
@@ -78,25 +84,46 @@ class SQLServerClient:
             self.connection.close()
             logger.info("Disconnected from SQL Server")
 
-    def get_sinsei_code(self) -> Optional[str]:
+    def get_sinsei_code(self, auto_no: str = '', auto_no_chr: str = 'ITSEQ') -> Optional[str]:
         """
         Query to get SINSEI_CODE from TR_SINSEI_DATA_HEADER
-        Returns the first matching record based on conditions
+
+        Args:
+            auto_no: Specific document number (e.g., 'ITSEQ-2601-00002') for recovery mode
+            auto_no_chr: Document prefix (e.g., 'ITSEQ') for normal mode
+
+        Returns the first matching record based on conditions.
+        If auto_no is provided, searches by exact document number (recovery mode).
+        Otherwise, searches by prefix (normal mode).
         """
-        query = """
-            SELECT TOP 1 SINSEI_CODE
-            FROM FLIISA.TR_SINSEI_DATA_HEADER
-            WHERE AUTO_NO_CHR = 'ITSEQ'
-                AND JOUTAI_KBN = 1
-                AND DATEPART(MILLISECOND, INS_DATE) != 0
-                AND DATEPART(MILLISECOND, UPD_DATE) != 0
-                AND DATEPART(SECOND, INS_DATE) != 0
-                AND DATEPART(SECOND, UPD_DATE) != 0
-            ORDER BY UPD_DATE ASC
-        """
+        if auto_no:
+            # Recovery mode: Search by exact document number
+            query = """
+                SELECT TOP 1 SINSEI_CODE
+                FROM FLIISA.TR_SINSEI_DATA_HEADER
+                WHERE AUTO_NO = ?
+            """
+            params = (auto_no,)
+            logger.info(f"Recovery mode: Searching for document AUTO_NO = '{auto_no}'")
+        else:
+            # Normal mode: Search by prefix with conditions
+            query = """
+                SELECT TOP 1 SINSEI_CODE
+                FROM FLIISA.TR_SINSEI_DATA_HEADER
+                WHERE AUTO_NO_CHR = ?
+                    AND JOUTAI_KBN = 1
+                    AND DATEPART(MILLISECOND, INS_DATE) != 0
+                    AND DATEPART(MILLISECOND, UPD_DATE) != 0
+                    AND DATEPART(SECOND, INS_DATE) != 0
+                    AND DATEPART(SECOND, UPD_DATE) != 0
+                ORDER BY UPD_DATE ASC
+            """
+            params = (auto_no_chr,)
+            logger.info(f"Normal mode: Searching for documents with prefix AUTO_NO_CHR = '{auto_no_chr}'")
+
         try:
             cursor = self.connection.cursor()
-            cursor.execute(query)
+            cursor.execute(query, params)
             row = cursor.fetchone()
             if row:
                 sinsei_code = row[0]
@@ -210,8 +237,11 @@ class FileTransferService:
             # Connect to SQL Server
             self.sql_client.connect()
 
-            # Get SINSEI_CODE
-            sinsei_code = self.sql_client.get_sinsei_code()
+            # Get SINSEI_CODE (uses AUTO_NO for recovery mode, or AUTO_NO_CHR for normal mode)
+            sinsei_code = self.sql_client.get_sinsei_code(
+                auto_no=self.config.AUTO_NO,
+                auto_no_chr=self.config.AUTO_NO_CHR
+            )
             if not sinsei_code:
                 logger.warning("No records found to process")
                 return uploaded_files

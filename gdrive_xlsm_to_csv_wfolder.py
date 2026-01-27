@@ -42,8 +42,8 @@ class Config:
     SQL_PASSWORD = os.getenv('SQL_PASSWORD', 'your_password')
     SQL_DRIVER = os.getenv('SQL_DRIVER', '{ODBC Driver 17 for SQL Server}')
 
-    # Document search settings
-    AUTO_NO_CHR = os.getenv('AUTO_NO_CHR', 'ITSEQ')
+    # Document search settings (separate from sql_to_gdrive.py)
+    XLSM_AUTO_NO_CHR = os.getenv('XLSM_AUTO_NO_CHR', 'ITSEQ')
 
     # Google Drive settings
     SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', 'service_account_key.json')
@@ -391,7 +391,7 @@ class FileTransferService:
             self.sql_client.connect()
 
             # Step 1: Get approved SINSEI_CODE
-            sinsei_code = self.sql_client.get_approved_sinsei_code(self.config.AUTO_NO_CHR)
+            sinsei_code = self.sql_client.get_approved_sinsei_code(self.config.XLSM_AUTO_NO_CHR)
             if not sinsei_code:
                 logger.warning("No approved documents found to process")
                 return result

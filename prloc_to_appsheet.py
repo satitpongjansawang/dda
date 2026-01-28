@@ -109,7 +109,8 @@ class PRDocument:
     """PR Local Purchase document data"""
     sinsei_code: str
     google_drive_link: str = ""
-    company_code: str = ""
+    company_code: str = ""      # จาก SINSEI_SYOZOKU_CODE
+    document_id: str = ""       # จาก AUTO_NO
     # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
 
     def to_appsheet_row(self) -> Dict[str, Any]:
@@ -118,6 +119,7 @@ class PRDocument:
             "sinsei_code": self.sinsei_code,
             "google_drive_link": self.google_drive_link,
             "company_code": self.company_code,
+            "document_id": self.document_id,
             # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
         }
 
@@ -245,34 +247,33 @@ class SQLServerClient:
 
     def get_document_details(self, sinsei_code: str) -> Dict[str, Any]:
         """
-        Get additional document details from TR_SINSEI_DATA_DT
+        Get document details from TR_SINSEI_DATA_HEADER
 
         Args:
             sinsei_code: Document SINSEI_CODE
 
         Returns:
-            Dictionary with document details
+            Dictionary with document details:
+            - COMPANY_CODE: from SINSEI_SYOZOKU_CODE
+            - DOCUMENT_ID: from AUTO_NO
         """
-        # Query to get specific fields (adjust KOUMOKU_KEY values as needed)
         query = """
-            SELECT KOUMOKU_KEY, KOUMOKU_VALUE
-            FROM FLIISA.TR_SINSEI_DATA_DT
+            SELECT SINSEI_SYOZOKU_CODE, AUTO_NO
+            FROM FLIISA.TR_SINSEI_DATA_HEADER
             WHERE SINSEI_CODE = ?
-                AND KOUMOKU_KEY IN ('COMPANY_CODE', 'BRANCH_CODE', 'DOC_NUMBER')
         """
 
         try:
             cursor = self.connection.cursor()
             cursor.execute(query, (sinsei_code,))
-            rows = cursor.fetchall()
+            row = cursor.fetchone()
 
             details = {}
-            for row in rows:
-                key = row[0]
-                value = row[1]
-                details[key] = value
+            if row:
+                details["COMPANY_CODE"] = row[0] or ""
+                details["DOCUMENT_ID"] = row[1] or ""
 
-            logger.info(f"Retrieved {len(details)} detail field(s) for {sinsei_code}")
+            logger.info(f"Retrieved details for {sinsei_code}: company_code={details.get('COMPANY_CODE')}, document_id={details.get('DOCUMENT_ID')}")
             return details
 
         except pyodbc.Error as e:
@@ -481,9 +482,10 @@ class PRLocalPurchaseService:
             else:
                 result["steps"].append({"step": "get_drive_link", "success": False, "error": "No link found"})
 
-            # Step 2: Get additional details
+            # Step 2: Get additional details from TR_SINSEI_DATA_HEADER
             details = self.sql_client.get_document_details(doc.sinsei_code)
-            doc.company_code = details.get("COMPANY_CODE", "")
+            doc.company_code = details.get("COMPANY_CODE", "")   # SINSEI_SYOZOKU_CODE
+            doc.document_id = details.get("DOCUMENT_ID", "")     # AUTO_NO
             # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
             result["steps"].append({"step": "get_details", "success": True})
 

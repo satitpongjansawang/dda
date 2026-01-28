@@ -108,27 +108,17 @@ class Config:
 class PRDocument:
     """PR Local Purchase document data"""
     sinsei_code: str
-    auto_no: str = ""
     google_drive_link: str = ""
     company_code: str = ""
-    branch_code: str = ""
-    doc_number: str = ""
-    status: str = ""
-    ins_date: str = ""
-    upd_date: str = ""
+    # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
 
     def to_appsheet_row(self) -> Dict[str, Any]:
         """Convert to AppSheet row format"""
         return {
-            "SINSEI_CODE": self.sinsei_code,
-            "AUTO_NO": self.auto_no,
-            "GOOGLE_DRIVE_LINK": self.google_drive_link,
-            "COMPANY_CODE": self.company_code,
-            "BRANCH_CODE": self.branch_code,
-            "DOC_NUMBER": self.doc_number,
-            "STATUS": self.status,
-            "INS_DATE": self.ins_date,
-            "UPD_DATE": self.upd_date,
+            "sinsei_code": self.sinsei_code,
+            "google_drive_link": self.google_drive_link,
+            "company_code": self.company_code,
+            # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
         }
 
 
@@ -178,12 +168,7 @@ class SQLServerClient:
         if self.config.auto_no:
             # Recovery mode: Search by exact document number
             query = f"""
-                SELECT TOP {limit}
-                    h.SINSEI_CODE,
-                    h.AUTO_NO,
-                    h.JOUTAI_KBN,
-                    h.INS_DATE,
-                    h.UPD_DATE
+                SELECT TOP {limit} h.SINSEI_CODE
                 FROM FLIISA.TR_SINSEI_DATA_HEADER h
                 WHERE h.AUTO_NO = ?
             """
@@ -192,12 +177,7 @@ class SQLServerClient:
         else:
             # Normal mode: Search for approved documents
             query = f"""
-                SELECT TOP {limit}
-                    h.SINSEI_CODE,
-                    h.AUTO_NO,
-                    h.JOUTAI_KBN,
-                    h.INS_DATE,
-                    h.UPD_DATE
+                SELECT TOP {limit} h.SINSEI_CODE
                 FROM FLIISA.TR_SINSEI_DATA_HEADER h
                 WHERE h.AUTO_NO_CHR = ?
                     AND h.JOUTAI_KBN = 1
@@ -219,10 +199,7 @@ class SQLServerClient:
             for row in rows:
                 doc = PRDocument(
                     sinsei_code=row[0],
-                    auto_no=row[1] or "",
-                    status=str(row[2]) if row[2] else "",
-                    ins_date=str(row[3]) if row[3] else "",
-                    upd_date=str(row[4]) if row[4] else "",
+                    # google_drive_link และ company_code จะถูก set ใน process_document()
                 )
                 documents.append(doc)
 
@@ -377,8 +354,8 @@ class AppSheetClient:
         payload = {
             "Action": "Add",
             "Properties": {
-                "Locale": "th-TH",
-                "Timezone": "Asia/Bangkok"
+                "Locale": "en-US",
+                "Timezone": "SE Asia Standard Time"
             },
             "Rows": [data]
         }
@@ -414,8 +391,8 @@ class AppSheetClient:
         payload = {
             "Action": "Add",
             "Properties": {
-                "Locale": "th-TH",
-                "Timezone": "Asia/Bangkok"
+                "Locale": "en-US",
+                "Timezone": "SE Asia Standard Time"
             },
             "Rows": rows
         }
@@ -507,8 +484,7 @@ class PRLocalPurchaseService:
             # Step 2: Get additional details
             details = self.sql_client.get_document_details(doc.sinsei_code)
             doc.company_code = details.get("COMPANY_CODE", "")
-            doc.branch_code = details.get("BRANCH_CODE", "")
-            doc.doc_number = details.get("DOC_NUMBER", "")
+            # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
             result["steps"].append({"step": "get_details", "success": True})
 
             # Step 3: Add to AppSheet

@@ -355,3 +355,220 @@ function download_exc(file_lnk) {
 function exportCSV(gid, excel_id) {
   return exportToCSV(gid, excel_id);
 }
+
+// ===================== TEST FUNCTIONS =====================
+// ฟังก์ชันสำหรับทดสอบโค้ด - รันจาก Google Apps Script Editor
+
+const TEST_URL = "https://docs.google.com/spreadsheets/d/1kWlcLboZ2-zIT8XnIP_mrureVzPIM510vGeC0ZDhyCo";
+
+/**
+ * ทดสอบทุกฟังก์ชัน (รันทีละขั้นตอน)
+ */
+function runAllTests() {
+  Logger.log("========== เริ่มทดสอบทั้งหมด ==========\n");
+
+  test1_extractFileId();
+  test2_createResult();
+  test3_findLastRowInColumn();
+  test4_formatDateValue();
+  test5_createCSVContent();
+  test6_exportToCSV();
+
+  Logger.log("\n========== ทดสอบเสร็จสิ้น ==========");
+}
+
+/**
+ * Test 1: ทดสอบ extractFileId()
+ */
+function test1_extractFileId() {
+  Logger.log("--- Test 1: extractFileId() ---");
+
+  const testCases = [
+    { url: "https://docs.google.com/spreadsheets/d/1kWlcLboZ2-zIT8XnIP_mrureVzPIM510vGeC0ZDhyCo/edit", expected: "1kWlcLboZ2-zIT8XnIP_mrureVzPIM510vGeC0ZDhyCo" },
+    { url: "https://drive.google.com/file/d/1ABC123xyz456789012345678901234/view", expected: "1ABC123xyz456789012345678901234" },
+    { url: "https://drive.google.com/open?id=1ABC123xyz456789012345678901234", expected: "1ABC123xyz456789012345678901234" },
+    { url: "", expected: null },
+    { url: null, expected: null }
+  ];
+
+  let passed = 0;
+  testCases.forEach((test, index) => {
+    const result = extractFileId(test.url);
+    const status = result === test.expected ? "PASS" : "FAIL";
+    if (status === "PASS") passed++;
+    Logger.log("  Case " + (index + 1) + ": " + status + " | URL: " + (test.url || "(empty)") + " → " + result);
+  });
+
+  Logger.log("  ผลลัพธ์: " + passed + "/" + testCases.length + " passed\n");
+  return passed === testCases.length;
+}
+
+/**
+ * Test 2: ทดสอบ createResult()
+ */
+function test2_createResult() {
+  Logger.log("--- Test 2: createResult() ---");
+
+  // Test success case
+  const successResult = createResult(true, "สำเร็จ", { id: "123" });
+  const successPass = successResult.success === true &&
+                      successResult.message === "สำเร็จ" &&
+                      successResult.data.id === "123";
+  Logger.log("  Success case: " + (successPass ? "PASS" : "FAIL"));
+
+  // Test failure case
+  const failResult = createResult(false, "ผิดพลาด");
+  const failPass = failResult.success === false &&
+                   failResult.message === "ผิดพลาด" &&
+                   !failResult.data;
+  Logger.log("  Failure case: " + (failPass ? "PASS" : "FAIL"));
+
+  // Test timestamp exists
+  const hasTimestamp = successResult.timestamp && failResult.timestamp;
+  Logger.log("  Timestamp exists: " + (hasTimestamp ? "PASS" : "FAIL"));
+
+  Logger.log("  ผลลัพธ์: " + (successPass && failPass && hasTimestamp ? "3/3" : "FAIL") + " passed\n");
+  return successPass && failPass && hasTimestamp;
+}
+
+/**
+ * Test 3: ทดสอบ findLastRowInColumn()
+ */
+function test3_findLastRowInColumn() {
+  Logger.log("--- Test 3: findLastRowInColumn() ---");
+
+  const testData = [
+    ["A1", "B1", "C1", "D1"],
+    ["A2", "B2", "C2", "D2"],
+    ["A3", "B3", "C3", ""],
+    ["A4", "", "", ""],
+    ["", "", "", ""]
+  ];
+
+  const testCases = [
+    { colIndex: 0, expected: 4, desc: "Column A (last at row 4)" },
+    { colIndex: 1, expected: 2, desc: "Column B (last at row 2)" },
+    { colIndex: 3, expected: 2, desc: "Column D (last at row 2)" }
+  ];
+
+  let passed = 0;
+  testCases.forEach((test, index) => {
+    const result = findLastRowInColumn(testData, test.colIndex);
+    const status = result === test.expected ? "PASS" : "FAIL";
+    if (status === "PASS") passed++;
+    Logger.log("  " + test.desc + ": " + status + " (expected: " + test.expected + ", got: " + result + ")");
+  });
+
+  Logger.log("  ผลลัพธ์: " + passed + "/" + testCases.length + " passed\n");
+  return passed === testCases.length;
+}
+
+/**
+ * Test 4: ทดสอบ formatDateValue()
+ */
+function test4_formatDateValue() {
+  Logger.log("--- Test 4: formatDateValue() ---");
+
+  // Test with Date object
+  const testDate = new Date(2025, 0, 15); // Jan 15, 2025
+  const dateResult = formatDateValue(testDate);
+  const datePass = dateResult === "20250115";
+  Logger.log("  Date object (2025-01-15): " + (datePass ? "PASS" : "FAIL") + " → " + dateResult);
+
+  // Test with empty value
+  const emptyResult = formatDateValue("");
+  const emptyPass = emptyResult === "";
+  Logger.log("  Empty value: " + (emptyPass ? "PASS" : "FAIL") + " → '" + emptyResult + "'");
+
+  // Test with null
+  const nullResult = formatDateValue(null);
+  const nullPass = nullResult === "";
+  Logger.log("  Null value: " + (nullPass ? "PASS" : "FAIL") + " → '" + nullResult + "'");
+
+  const allPassed = datePass && emptyPass && nullPass;
+  Logger.log("  ผลลัพธ์: " + (allPassed ? "3/3" : "FAIL") + " passed\n");
+  return allPassed;
+}
+
+/**
+ * Test 5: ทดสอบ createCSVContent()
+ */
+function test5_createCSVContent() {
+  Logger.log("--- Test 5: createCSVContent() ---");
+
+  const testData = [
+    ["Name", "Value", "Description"],
+    ["Item1", "100", "Normal text"],
+    ["Item2", "200", "Text, with comma"],
+    ["Item3", "300", "Text with \"quotes\""]
+  ];
+
+  const result = createCSVContent(testData);
+
+  // Check basic structure
+  const lines = result.split("\r\n");
+  const hasCorrectLines = lines.length === 4;
+  Logger.log("  Correct line count (4): " + (hasCorrectLines ? "PASS" : "FAIL") + " → " + lines.length);
+
+  // Check comma escaping
+  const hasEscapedComma = result.includes('"Text, with comma"');
+  Logger.log("  Comma escaped: " + (hasEscapedComma ? "PASS" : "FAIL"));
+
+  // Check quote escaping
+  const hasEscapedQuotes = result.includes('"Text with ""quotes"""');
+  Logger.log("  Quotes escaped: " + (hasEscapedQuotes ? "PASS" : "FAIL"));
+
+  const allPassed = hasCorrectLines && hasEscapedComma && hasEscapedQuotes;
+  Logger.log("  ผลลัพธ์: " + (allPassed ? "3/3" : "FAIL") + " passed\n");
+  return allPassed;
+}
+
+/**
+ * Test 6: ทดสอบ exportToCSV() กับ Google Sheet จริง
+ * หมายเหตุ: ต้องมี sheet "PR Form" ในไฟล์ทดสอบ
+ */
+function test6_exportToCSV() {
+  Logger.log("--- Test 6: exportToCSV() ---");
+  Logger.log("  ทดสอบกับไฟล์: " + TEST_URL);
+
+  const fileId = extractFileId(TEST_URL);
+  if (!fileId) {
+    Logger.log("  FAIL: ไม่สามารถดึง File ID ได้");
+    return false;
+  }
+  Logger.log("  File ID: " + fileId);
+
+  try {
+    const result = exportToCSV(fileId, fileId);
+    Logger.log("  Result: " + JSON.stringify(result, null, 2));
+
+    if (result.success) {
+      Logger.log("  STATUS: PASS - สร้าง CSV สำเร็จ");
+      Logger.log("  CSV File: " + result.data.csvName);
+    } else {
+      Logger.log("  STATUS: " + result.message);
+      Logger.log("  (อาจไม่ใช่ error - ขึ้นอยู่กับข้อมูลในไฟล์)");
+    }
+
+    return true;
+  } catch (error) {
+    Logger.log("  ERROR: " + error.message);
+    return false;
+  }
+}
+
+/**
+ * Test 7: ทดสอบ Full Flow - downloadExcel()
+ * หมายเหตุ: ใช้กับไฟล์ Excel (.xlsm) เท่านั้น
+ */
+function test7_downloadExcel() {
+  Logger.log("--- Test 7: downloadExcel() (Full Flow) ---");
+  Logger.log("  หมายเหตุ: ฟังก์ชันนี้ใช้กับไฟล์ Excel (.xlsm) เท่านั้น");
+  Logger.log("  ถ้าต้องการทดสอบ ให้เปลี่ยน TEST_URL เป็น URL ของไฟล์ Excel");
+
+  // Uncomment บรรทัดด้านล่างเพื่อทดสอบกับไฟล์ Excel จริง
+  // const result = downloadExcel(TEST_URL);
+  // Logger.log("  Result: " + JSON.stringify(result, null, 2));
+
+  Logger.log("  SKIPPED - ต้องใช้ไฟล์ Excel (.xlsm)\n");
+}

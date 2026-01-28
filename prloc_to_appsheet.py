@@ -109,7 +109,8 @@ class PRDocument:
     """PR Local Purchase document data"""
     sinsei_code: str
     company_code: str = ""      # จาก SINSEI_SYOZOKU_CODE → AppSheet: company
-    document_id: str = ""       # จาก AUTO_NO → AppSheet: document_running_no
+    document_id: str = ""       # จาก AUTO_NO → AppSheet: document_id, document_running_no
+    section_code: str = ""      # จาก SYUYOU_3 → AppSheet: section_code
     links: List[str] = field(default_factory=list)  # Links จาก TR_SINSEI_DATA_LNK (LNK1-LNK5)
 
     def to_appsheet_rows(self) -> List[Dict[str, Any]]:
@@ -120,7 +121,9 @@ class PRDocument:
                 rows.append({
                     "id_random_download": self.sinsei_code,
                     "company": self.company_code,
+                    "document_id": self.document_id,
                     "document_running_no": self.document_id,
+                    "section_code": self.section_code,
                     "link": link,
                 })
         return rows
@@ -290,9 +293,10 @@ class SQLServerClient:
             Dictionary with document details:
             - COMPANY_CODE: from SINSEI_SYOZOKU_CODE
             - DOCUMENT_ID: from AUTO_NO
+            - SECTION_CODE: from SYUYOU_3
         """
         query = """
-            SELECT SINSEI_SYOZOKU_CODE, AUTO_NO
+            SELECT SINSEI_SYOZOKU_CODE, AUTO_NO, SYUYOU_3
             FROM FLIISA.TR_SINSEI_DATA_HEADER
             WHERE SINSEI_CODE = ?
         """
@@ -306,8 +310,9 @@ class SQLServerClient:
             if row:
                 details["COMPANY_CODE"] = row[0] or ""
                 details["DOCUMENT_ID"] = row[1] or ""
+                details["SECTION_CODE"] = row[2] or ""
 
-            logger.info(f"Retrieved details for {sinsei_code}: company_code={details.get('COMPANY_CODE')}, document_id={details.get('DOCUMENT_ID')}")
+            logger.info(f"Retrieved details for {sinsei_code}: company={details.get('COMPANY_CODE')}, doc_id={details.get('DOCUMENT_ID')}, section={details.get('SECTION_CODE')}")
             return details
 
         except pyodbc.Error as e:
@@ -545,6 +550,7 @@ class PRLocalPurchaseService:
             details = self.sql_client.get_document_details(doc.sinsei_code)
             doc.company_code = details.get("COMPANY_CODE", "")   # SINSEI_SYOZOKU_CODE
             doc.document_id = details.get("DOCUMENT_ID", "")     # AUTO_NO
+            doc.section_code = details.get("SECTION_CODE", "")   # SYUYOU_3
             result["steps"].append({"step": "get_details", "success": True})
 
             # Step 2: Get all links from TR_SINSEI_DATA_LNK

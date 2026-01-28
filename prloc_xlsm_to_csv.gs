@@ -358,6 +358,79 @@ function exportCSV(gid, excel_id) {
   return exportToCSV(gid, excel_id);
 }
 
+// ===================== WEB APP FUNCTIONS =====================
+// ฟังก์ชันสำหรับเรียกใช้งานผ่าน HTTP request (จาก Python หรือ external service)
+
+/**
+ * Handle POST requests (สำหรับเรียกจาก Python)
+ * Deploy: Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone
+ *
+ * @param {Object} e - Event object จาก HTTP request
+ * @returns {TextOutput} JSON response
+ */
+function doPost(e) {
+  try {
+    // Parse request body
+    const payload = JSON.parse(e.postData.contents);
+    const action = payload.action;
+    const fileLink = payload.fileLink;
+
+    Logger.log("doPost received - Action: " + action + ", FileLink: " + fileLink);
+
+    let result;
+
+    switch (action) {
+      case "convertExcel":
+        // เรียก downloadExcel สำหรับไฟล์ .xlsm
+        result = downloadExcel(fileLink);
+        break;
+
+      case "exportCSV":
+        // เรียก exportToCSV สำหรับ Google Sheets
+        const fileId = extractFileId(fileLink);
+        if (!fileId) {
+          result = createResult(false, "ไม่สามารถดึง File ID จาก URL ได้");
+        } else {
+          result = exportToCSV(fileId, fileId);
+        }
+        break;
+
+      default:
+        result = createResult(false, "Unknown action: " + action);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    Logger.log("doPost Error: " + error.message);
+    const errorResult = createResult(false, "Server error: " + error.message);
+    return ContentService
+      .createTextOutput(JSON.stringify(errorResult))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Handle GET requests (สำหรับทดสอบว่า Web App ทำงานหรือไม่)
+ *
+ * @param {Object} e - Event object
+ * @returns {TextOutput} JSON response
+ */
+function doGet(e) {
+  const response = {
+    status: "ok",
+    message: "PR Local Purchase CSV Converter - Web App is running",
+    timestamp: new Date().toISOString(),
+    availableActions: ["convertExcel", "exportCSV"]
+  };
+
+  return ContentService
+    .createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // ===================== TEST FUNCTIONS =====================
 // ฟังก์ชันสำหรับทดสอบโค้ด - รันจาก Google Apps Script Editor
 

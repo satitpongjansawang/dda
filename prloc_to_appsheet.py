@@ -363,13 +363,26 @@ class AppSheetClient:
 
         try:
             logger.info(f"Adding row to AppSheet: {self.app_config.table_name}")
+            logger.info(f"API URL: {self.api_url}")
+            logger.info(f"Payload: {payload}")
+
             response = requests.post(
                 self.api_url,
                 json=payload,
                 headers=self.headers,
                 timeout=30
             )
+
+            # Log response details for debugging
+            logger.info(f"Response status: {response.status_code}")
+            logger.info(f"Response text: {response.text[:500] if response.text else '(empty)'}")
+
             response.raise_for_status()
+
+            # Check if response is empty
+            if not response.text:
+                logger.warning("Empty response from AppSheet API")
+                return {"success": False, "error": "Empty response from API"}
 
             result = response.json()
             logger.info("Successfully added row to AppSheet")
@@ -378,6 +391,10 @@ class AppSheetClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error adding row to AppSheet: {e}")
             return {"success": False, "error": str(e)}
+        except ValueError as e:
+            logger.error(f"Error parsing JSON response: {e}")
+            logger.error(f"Response text was: {response.text[:500] if response.text else '(empty)'}")
+            return {"success": False, "error": f"Invalid JSON response: {e}"}
 
     def add_rows(self, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

@@ -110,16 +110,20 @@ class PRDocument:
     sinsei_code: str
     company_code: str = ""      # จาก SINSEI_SYOZOKU_CODE → AppSheet: company
     document_id: str = ""       # จาก AUTO_NO → AppSheet: document_running_no
-    # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
+    links: List[str] = field(default_factory=list)  # Links จาก TR_SINSEI_DATA_LNK (LNK1-LNK5)
 
-    def to_appsheet_row(self) -> Dict[str, Any]:
-        """Convert to AppSheet row format"""
-        return {
-            "id_random_download": self.sinsei_code,
-            "company": self.company_code,
-            "document_running_no": self.document_id,
-            # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
-        }
+    def to_appsheet_rows(self) -> List[Dict[str, Any]]:
+        """Convert to AppSheet rows format (1 row per link)"""
+        rows = []
+        for link in self.links:
+            if link:  # เฉพาะ link ที่ไม่เป็น NULL/empty
+                rows.append({
+                    "id_random_download": self.sinsei_code,
+                    "company": self.company_code,
+                    "document_running_no": self.document_id,
+                    "link": link,
+                })
+        return rows
 
 
 # ===================== SQL SERVER CLIENT =====================
@@ -241,6 +245,38 @@ class SQLServerClient:
 
         except pyodbc.Error as e:
             logger.error(f"Error getting Google Drive link: {e}")
+            raise
+
+    def get_all_links(self, sinsei_code: str) -> List[str]:
+        """
+        Get all Google Drive links (LNK1-LNK5) from TR_SINSEI_DATA_LNK
+
+        Args:
+            sinsei_code: Document SINSEI_CODE
+
+        Returns:
+            List of Google Drive links (excluding NULL values)
+        """
+        query = """
+            SELECT KOUMOKU_VALUE
+            FROM FLIISA.TR_SINSEI_DATA_LNK
+            WHERE SINSEI_CODE = ?
+                AND KOUMOKU_KEY IN ('LNK1', 'LNK2', 'LNK3', 'LNK4', 'LNK5')
+            ORDER BY KOUMOKU_KEY
+        """
+
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(query, (sinsei_code,))
+            rows = cursor.fetchall()
+
+            # Filter out NULL values
+            links = [row[0] for row in rows if row[0]]
+            logger.info(f"Found {len(links)} link(s) for {sinsei_code}")
+            return links
+
+        except pyodbc.Error as e:
+            logger.error(f"Error getting links: {e}")
             raise
 
     def get_document_details(self, sinsei_code: str) -> Dict[str, Any]:
@@ -415,13 +451,26 @@ class AppSheetClient:
 
         try:
             logger.info(f"Adding {len(rows)} row(s) to AppSheet: {self.app_config.table_name}")
+            logger.info(f"API URL: {self.api_url}")
+            logger.info(f"Payload: {payload}")
+
             response = requests.post(
                 self.api_url,
                 json=payload,
                 headers=self.headers,
                 timeout=60
             )
+
+            # Log response details for debugging
+            logger.info(f"Response status: {response.status_code}")
+            logger.info(f"Response text: {response.text[:500] if response.text else '(empty)'}")
+
             response.raise_for_status()
+
+            # Check if response is empty
+            if not response.text:
+                logger.warning("Empty response from AppSheet API")
+                return {"success": False, "error": "Empty response from API"}
 
             result = response.json()
             logger.info(f"Successfully added {len(rows)} row(s) to AppSheet")
@@ -430,6 +479,9 @@ class AppSheetClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error adding rows to AppSheet: {e}")
             return {"success": False, "error": str(e)}
+        except ValueError as e:
+            logger.error(f"Error parsing JSON response: {e}")
+            return {"success": False, "error": f"Invalid JSON response: {e}"}
 
     def test_connection(self) -> bool:
         """
@@ -493,15 +545,27 @@ class PRLocalPurchaseService:
             details = self.sql_client.get_document_details(doc.sinsei_code)
             doc.company_code = details.get("COMPANY_CODE", "")   # SINSEI_SYOZOKU_CODE
             doc.document_id = details.get("DOCUMENT_ID", "")     # AUTO_NO
-            # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
             result["steps"].append({"step": "get_details", "success": True})
 
-            # Step 2: Add to AppSheet
-            appsheet_result = self.appsheet_client.add_row(doc.to_appsheet_row())
-            if appsheet_result["success"]:
-                result["steps"].append({"step": "add_to_appsheet", "success": True})
+            # Step 2: Get all links from TR_SINSEI_DATA_LNK
+            doc.links = self.sql_client.get_all_links(doc.sinsei_code)
+            result["steps"].append({"step": "get_links", "success": True, "count": len(doc.links)})
 
-                # Step 3: Update SQL Server (only if AppSheet was successful)
+            # Step 3: Add to AppSheet (1 row per link)
+            rows = doc.to_appsheet_rows()
+            if not rows:
+                result["steps"].append({
+                    "step": "add_to_appsheet",
+                    "success": False,
+                    "error": "No links found to insert"
+                })
+                return result
+
+            appsheet_result = self.appsheet_client.add_rows(rows)
+            if appsheet_result["success"]:
+                result["steps"].append({"step": "add_to_appsheet", "success": True, "rows_added": len(rows)})
+
+                # Step 4: Update SQL Server (only if AppSheet was successful)
                 update_success = self.sql_client.update_document_status(doc.sinsei_code)
                 result["steps"].append({"step": "update_sql", "success": update_success})
 

@@ -108,18 +108,16 @@ class Config:
 class PRDocument:
     """PR Local Purchase document data"""
     sinsei_code: str
-    google_drive_link: str = ""
-    company_code: str = ""      # จาก SINSEI_SYOZOKU_CODE
-    document_id: str = ""       # จาก AUTO_NO
+    company_code: str = ""      # จาก SINSEI_SYOZOKU_CODE → AppSheet: company
+    document_id: str = ""       # จาก AUTO_NO → AppSheet: document_running_no
     # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
 
     def to_appsheet_row(self) -> Dict[str, Any]:
         """Convert to AppSheet row format"""
         return {
-            "sinsei_code": self.sinsei_code,
-            "google_drive_link": self.google_drive_link,
-            "company_code": self.company_code,
-            "document_id": self.document_id,
+            "id_random_download": self.sinsei_code,
+            "company": self.company_code,
+            "document_running_no": self.document_id,
             # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
         }
 
@@ -491,27 +489,19 @@ class PRLocalPurchaseService:
         }
 
         try:
-            # Step 1: Get Google Drive link
-            drive_link = self.sql_client.get_google_drive_link(doc.sinsei_code)
-            if drive_link:
-                doc.google_drive_link = drive_link
-                result["steps"].append({"step": "get_drive_link", "success": True})
-            else:
-                result["steps"].append({"step": "get_drive_link", "success": False, "error": "No link found"})
-
-            # Step 2: Get additional details from TR_SINSEI_DATA_HEADER
+            # Step 1: Get document details from TR_SINSEI_DATA_HEADER
             details = self.sql_client.get_document_details(doc.sinsei_code)
             doc.company_code = details.get("COMPANY_CODE", "")   # SINSEI_SYOZOKU_CODE
             doc.document_id = details.get("DOCUMENT_ID", "")     # AUTO_NO
             # เพิ่ม field อื่นๆ ได้ที่นี่ตามต้องการ
             result["steps"].append({"step": "get_details", "success": True})
 
-            # Step 3: Add to AppSheet
+            # Step 2: Add to AppSheet
             appsheet_result = self.appsheet_client.add_row(doc.to_appsheet_row())
             if appsheet_result["success"]:
                 result["steps"].append({"step": "add_to_appsheet", "success": True})
 
-                # Step 4: Update SQL Server (only if AppSheet was successful)
+                # Step 3: Update SQL Server (only if AppSheet was successful)
                 update_success = self.sql_client.update_document_status(doc.sinsei_code)
                 result["steps"].append({"step": "update_sql", "success": update_success})
 

@@ -6,9 +6,12 @@
 // ===================== CONFIGURATION =====================
 const CONFIG = {
   // Folder IDs
-  DESTINATION_FOLDER_ID: "13rrgnBkhACRWAq15e2Pr49cQbKZJ5YFQ",
-  ASIA_CSV_FOLDER_ID: "1EzvuKYvXUOncf-mq3DgJnSd1t3xmH3B8",
-  SIAM_CSV_FOLDER_ID: "1R7gBJUCHL7-yTLETLafD2aItzCyENYK0",
+  // Source folders (โฟลเดอร์ต้นทางที่เก็บไฟล์ Excel)
+  ASIA_SOURCE_FOLDER_ID: "1EzvuKYvXUOncf-mq3DgJnSd1t3xmH3B8",
+  SIAM_SOURCE_FOLDER_ID: "1R7gBJUCHL7-yTLETLafD2aItzCyENYK0",
+
+  // Destination folder (โฟลเดอร์ปลายทางสำหรับเก็บไฟล์ CSV)
+  CSV_OUTPUT_FOLDER_ID: "13rrgnBkhACRWAq15e2Pr49cQbKZJ5YFQ",
 
   // Sheet names
   PR_FORM_SHEET: "PR Form",
@@ -40,11 +43,11 @@ function downloadExcel(fileLink) {
     const excelFile = DriveApp.getFileById(fileId);
     const newSheetName = excelFile.getName().replace(/\.xlsm$/i, "");
 
-    // 3. Convert Excel to Google Sheets
+    // 3. Convert Excel to Google Sheets (temp file)
     const resource = {
       title: newSheetName,
       mimeType: MimeType.GOOGLE_SHEETS,
-      parents: [{ id: CONFIG.DESTINATION_FOLDER_ID }]
+      parents: [{ id: CONFIG.CSV_OUTPUT_FOLDER_ID }]
     };
 
     const convertedFile = Drive.Files.copy(resource, fileId, {
@@ -133,10 +136,9 @@ function exportToCSV(gsheetId, excelId) {
       return createResult(false, "รหัสบริษัท '" + branchCode + "' ไม่ต้องการ export CSV");
     }
 
-    // 9. Create CSV file
+    // 9. Create CSV file in destination folder
     const csvContent = createCSVContent(outputData);
-    const folderId = branchCode === "ANGK" ? CONFIG.ASIA_CSV_FOLDER_ID : CONFIG.SIAM_CSV_FOLDER_ID;
-    const folder = DriveApp.getFolderById(folderId);
+    const folder = DriveApp.getFolderById(CONFIG.CSV_OUTPUT_FOLDER_ID);
 
     const timestamp = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "ddMMyyyyHHmmss");
     const fileName = "PR_for_Local_Purchase_" + timestamp + "_" + docNumber + ";" + excelId + ".csv";

@@ -59,33 +59,33 @@ class AppSheetConfig:
 
 @dataclass
 class Config:
-    """Main configuration with environment support"""
+    """Main configuration with environment support (PRGIS-specific)"""
 
-    # Current environment
+    # Current environment (PRGIS uses separate environment setting from PRLOC)
     environment: Environment = field(default_factory=lambda: Environment(
-        os.getenv('ENVIRONMENT', 'test').lower()
+        os.getenv('PRGIS_ENVIRONMENT', 'test').lower()
     ))
 
-    # Database configurations
+    # Database configurations (PRGIS-specific)
     db_configs: Dict[Environment, DatabaseConfig] = field(default_factory=lambda: {
         Environment.TEST: DatabaseConfig(
-            server=os.getenv('TEST_SQL_SERVER', 'test_server'),
-            database=os.getenv('TEST_SQL_DATABASE', 'DASY-FLII-TEST'),
-            username=os.getenv('TEST_SQL_USERNAME', 'test_user'),
-            password=os.getenv('TEST_SQL_PASSWORD', 'test_password'),
+            server=os.getenv('PRGIS_TEST_SQL_SERVER', 'test_server'),
+            database=os.getenv('PRGIS_TEST_SQL_DATABASE', 'DASY-FLII-TEST'),
+            username=os.getenv('PRGIS_TEST_SQL_USERNAME', 'test_user'),
+            password=os.getenv('PRGIS_TEST_SQL_PASSWORD', 'test_password'),
         ),
         Environment.PRODUCTION: DatabaseConfig(
-            server=os.getenv('PROD_SQL_SERVER', 'prod_server'),
-            database=os.getenv('PROD_SQL_DATABASE', 'DASY-FLII'),
-            username=os.getenv('PROD_SQL_USERNAME', 'prod_user'),
-            password=os.getenv('PROD_SQL_PASSWORD', 'prod_password'),
+            server=os.getenv('PRGIS_PROD_SQL_SERVER', 'prod_server'),
+            database=os.getenv('PRGIS_PROD_SQL_DATABASE', 'DASY-FLII'),
+            username=os.getenv('PRGIS_PROD_SQL_USERNAME', 'prod_user'),
+            password=os.getenv('PRGIS_PROD_SQL_PASSWORD', 'prod_password'),
         ),
     })
 
-    # AppSheet configuration for signed_box table
+    # AppSheet configuration for signed_box table (PRGIS-specific)
     appsheet: AppSheetConfig = field(default_factory=lambda: AppSheetConfig(
-        app_id=os.getenv('APPSHEET_APP_ID', 'your_app_id'),
-        api_key=os.getenv('APPSHEET_API_KEY', 'your_api_key'),
+        app_id=os.getenv('PRGIS_APPSHEET_APP_ID', 'your_app_id'),
+        api_key=os.getenv('PRGIS_APPSHEET_API_KEY', 'your_api_key'),
         table_name=os.getenv('PRGIS_APPSHEET_TABLE_NAME', 'signed_box'),
     ))
 

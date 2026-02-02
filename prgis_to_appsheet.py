@@ -219,6 +219,9 @@ class SQLServerClient:
 
             documents = []
             for row in rows:
+                # Debug: แสดงค่า raw จาก database
+                logger.info(f"Raw row data: SINSEI_CODE={row[0]}, AUTO_NO={row[1]}")
+
                 doc = PRGISDocument(
                     sinsei_code=row[0],
                     auto_no=row[1] or "",
@@ -405,10 +408,10 @@ class AppSheetClient:
 
             response.raise_for_status()
 
-            # Check if response is empty
-            if not response.text:
-                logger.warning("Empty response from AppSheet API")
-                return {"success": False, "error": "Empty response from API"}
+            # AppSheet API returns HTTP 200 with empty body on success
+            if not response.text or response.text.strip() == "":
+                logger.info("AppSheet API returned 200 with empty body (success)")
+                return {"success": True, "response": None}
 
             result = response.json()
             logger.info("Successfully added row to AppSheet")

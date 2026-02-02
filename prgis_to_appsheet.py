@@ -199,15 +199,14 @@ class SQLServerClient:
             logger.info(f"Recovery mode: Searching for AUTO_NO = '{self.config.auto_no}'")
         else:
             # Normal mode: Search for approved documents
+            # ค้นหา record ที่ไม่ลงท้ายด้วย 00.000 (ยังไม่ถูก process)
             query = f"""
                 SELECT TOP {limit} SINSEI_CODE, AUTO_NO
                 FROM FLIISA.TR_SINSEI_DATA_HEADER
                 WHERE AUTO_NO_CHR = ?
                     AND JOUTAI_KBN = 1
-                    AND DATEPART(MILLISECOND, INS_DATE) != 0
-                    AND DATEPART(MILLISECOND, UPD_DATE) != 0
-                    AND DATEPART(SECOND, INS_DATE) != 0
-                    AND DATEPART(SECOND, UPD_DATE) != 0
+                    AND (DATEPART(SECOND, INS_DATE) != 0 OR DATEPART(MILLISECOND, INS_DATE) != 0)
+                    AND (DATEPART(SECOND, UPD_DATE) != 0 OR DATEPART(MILLISECOND, UPD_DATE) != 0)
                 ORDER BY UPD_DATE ASC
             """
             params = (self.config.auto_no_chr,)

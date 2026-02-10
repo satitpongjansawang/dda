@@ -111,6 +111,7 @@ class ApprovalInfo:
     """Approval information for a single approver"""
     approver_name: str = ""
     approval_date: str = ""
+    position: int = 0  # Reviewer slot number extracted from SYONIN_NAME (e.g. "Reviewer1" → 1)
 
 
 @dataclass
@@ -130,17 +131,16 @@ class PRGISDocument:
             "is_active": True,
         }
 
-        # Add approvers (up to 10)
-        for i in range(10):
-            approver_key = f"approver{i + 1}"
-            time_key = f"approver_time{i + 1}"
+        # Initialize all 10 approver slots as empty
+        for i in range(1, 11):
+            row[f"approver{i}"] = ""
+            row[f"approver_time{i}"] = ""
 
-            if i < len(self.approvers):
-                row[approver_key] = self.approvers[i].approver_name
-                row[time_key] = self.approvers[i].approval_date
-            else:
-                row[approver_key] = ""
-                row[time_key] = ""
+        # Map approvers to correct slots using position from SYONIN_NAME
+        for approver in self.approvers:
+            if 1 <= approver.position <= 10:
+                row[f"approver{approver.position}"] = approver.approver_name
+                row[f"approver_time{approver.position}"] = approver.approval_date
 
         return row
 
@@ -272,16 +272,20 @@ class SQLServerClient:
         """
         Get approval chain from TR_SINSEI_SYONIN
 
+        Uses SYONIN_NAME column (e.g. "Reviewer1", "Reviewer2", ...)
+        to determine which approver slot each record belongs to.
+
         Args:
             sinsei_code: Document SINSEI_CODE
 
         Returns:
-            List of ApprovalInfo (up to 10 approvers)
+            List of ApprovalInfo with position mapped from SYONIN_NAME
         """
         query = """
             SELECT
                 SYONIN_SIMEI,
-                SYONIN_DATE
+                SYONIN_DATE,
+                SYONIN_NAME
             FROM FLIISA.TR_SINSEI_SYONIN
             WHERE SINSEI_CODE = ?
             ORDER BY SYONIN_STEP_NO, SYONIN_NO
@@ -293,15 +297,28 @@ class SQLServerClient:
             rows = cursor.fetchall()
 
             approvers = []
-            for row in rows[:10]:  # Limit to 10 approvers
+            for row in rows:
                 approval_date = ""
                 if row[1]:
-                    # Format date as string
                     approval_date = str(row[1])
+
+                # Extract position from SYONIN_NAME (e.g. "Reviewer1" → 1)
+                syonin_name = row[2] or ""
+                position = 0
+                if syonin_name.startswith("Reviewer"):
+                    try:
+                        position = int(syonin_name.replace("Reviewer", ""))
+                    except ValueError:
+                        logger.warning(f"Cannot parse position from SYONIN_NAME: '{syonin_name}'")
+
+                if position < 1 or position > 10:
+                    logger.warning(f"Skipping invalid position {position} from SYONIN_NAME: '{syonin_name}'")
+                    continue
 
                 approvers.append(ApprovalInfo(
                     approver_name=row[0] or "",
                     approval_date=approval_date,
+                    position=position,
                 ))
 
             logger.info(f"Found {len(approvers)} approver(s) for {sinsei_code}")

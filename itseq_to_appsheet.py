@@ -3,8 +3,8 @@ ITSEQ - SQL Server to AppSheet Processor
 
 This script:
 1. Queries SQL Server to find approved ITSEQ documents
-2. Gets document link from TR_SINSEI_DATA_LNK
-3. Adds data to Google AppSheet Database (signed_box table)
+2. Constructs document reference URL from SINSEI_CODE
+3. Adds data to Google AppSheet Database (mine_taskx table)
 4. Updates SQL Server to mark document as processed
 """
 
@@ -81,11 +81,11 @@ class Config:
         ),
     })
 
-    # AppSheet configuration for signed_box table (ITSEQ-specific)
+    # AppSheet configuration for mine_taskx table (ITSEQ-specific)
     appsheet: AppSheetConfig = field(default_factory=lambda: AppSheetConfig(
         app_id=os.getenv('ITSEQ_APPSHEET_APP_ID', 'your_app_id'),
         api_key=os.getenv('ITSEQ_APPSHEET_API_KEY', 'your_api_key'),
-        table_name=os.getenv('ITSEQ_APPSHEET_TABLE_NAME', 'signed_box'),
+        table_name=os.getenv('ITSEQ_APPSHEET_TABLE_NAME', 'mine_taskx'),
     ))
 
     # Document search settings
@@ -108,17 +108,34 @@ class Config:
 @dataclass
 class ITSEQDocument:
     """ITSEQ document data"""
-    sinsei_code: str
-    auto_no: str = ""           # AUTO_NO -> AppSheet: dasy_auto_no
-    sheet_url: str = ""         # LNK1 value -> AppSheet: sheet_url
+    sinsei_code: str            # SINSEI_CODE -> AppSheet: document_id
+    auto_no: str = ""           # AUTO_NO -> AppSheet: application_no
+    hakkou_syain_no: str = ""   # HAKKOU_SYAIN_NO -> AppSheet: applicant_code
+    hakkou_syain_simei: str = ""  # HAKKOU_SYAIN_SIMEI -> AppSheet: applicant
+    sinsei_syozoku_name: str = ""  # SINSEI_SYOZOKU_NAME -> AppSheet: placement
+    syuyou_1: str = ""          # SYUYOU_1 -> AppSheet: subject
+    refer_url: str = ""         # Constructed URL -> AppSheet: url_05_refer
+
+    # URL template for document reference
+    REFER_URL_TEMPLATE = (
+        "http://dasy.niterraibcasia.com/DASY-FLII/ope/common/pdfprint.page"
+        "?pdfPrintKbn=0&POPUPKBN=1&SHD_SCD={sinsei_code}&SHD_SRI_CODE=ITSEQ&SHD_SRI_HAN=1"
+    )
+
+    def build_refer_url(self) -> str:
+        """Construct document reference URL from SINSEI_CODE"""
+        return self.REFER_URL_TEMPLATE.format(sinsei_code=self.sinsei_code)
 
     def to_appsheet_row(self) -> Dict[str, Any]:
-        """Convert to AppSheet row format for signed_box table"""
+        """Convert to AppSheet row format for mine_taskx table"""
         row = {
-            "dasy_auto_no": self.auto_no,
-            "sheet_url": self.sheet_url,
-            "is_force_stamp": False,
-            "is_active": True,
+            "document_id": self.sinsei_code,
+            "application_no": self.auto_no,
+            "applicant_code": self.hakkou_syain_no,
+            "applicant": self.hakkou_syain_simei,
+            "placement": self.sinsei_syozoku_name,
+            "subject": self.syuyou_1,
+            "url_05_refer": self.refer_url,
         }
         return row
 
@@ -166,10 +183,18 @@ class SQLServerClient:
         Returns:
             List of ITSEQDocument objects
         """
+        select_columns = """
+                SINSEI_CODE,
+                AUTO_NO,
+                HAKKOU_SYAIN_NO,
+                HAKKOU_SYAIN_SIMEI,
+                SINSEI_SYOZOKU_NAME,
+                SYUYOU_1"""
+
         if self.config.auto_no:
             # Recovery mode: Search by exact document number
             query = f"""
-                SELECT TOP {limit} SINSEI_CODE, AUTO_NO
+                SELECT TOP {limit} {select_columns}
                 FROM FLIISA.TR_SINSEI_DATA_HEADER
                 WHERE AUTO_NO = ?
             """
@@ -178,7 +203,7 @@ class SQLServerClient:
         else:
             # Normal mode: Search for approved documents
             query = f"""
-                SELECT TOP {limit} SINSEI_CODE, AUTO_NO
+                SELECT TOP {limit} {select_columns}
                 FROM FLIISA.TR_SINSEI_DATA_HEADER
                 WHERE AUTO_NO_CHR = ?
                     AND JOUTAI_KBN = 1
@@ -201,7 +226,12 @@ class SQLServerClient:
                 doc = ITSEQDocument(
                     sinsei_code=row[0],
                     auto_no=row[1] or "",
+                    hakkou_syain_no=row[2] or "",
+                    hakkou_syain_simei=row[3] or "",
+                    sinsei_syozoku_name=row[4] or "",
+                    syuyou_1=row[5] or "",
                 )
+                doc.refer_url = doc.build_refer_url()
                 documents.append(doc)
 
             logger.info(f"Found {len(documents)} approved document(s)")
@@ -209,39 +239,6 @@ class SQLServerClient:
 
         except pyodbc.Error as e:
             logger.error(f"Error executing query: {e}")
-            raise
-
-    def get_document_link(self, sinsei_code: str) -> Optional[str]:
-        """
-        Get LNK1 value from TR_SINSEI_DATA_LNK
-
-        Args:
-            sinsei_code: Document SINSEI_CODE
-
-        Returns:
-            LNK1 value (sheet URL) or None
-        """
-        query = """
-            SELECT KOUMOKU_VALUE
-            FROM FLIISA.TR_SINSEI_DATA_LNK
-            WHERE SINSEI_CODE = ?
-                AND KOUMOKU_KEY = 'LNK1'
-        """
-
-        try:
-            cursor = self.connection.cursor()
-            cursor.execute(query, (sinsei_code,))
-            row = cursor.fetchone()
-
-            if row and row[0]:
-                logger.info(f"Found LNK1 for {sinsei_code}")
-                return row[0]
-            else:
-                logger.warning(f"No LNK1 found for {sinsei_code}")
-                return None
-
-        except pyodbc.Error as e:
-            logger.error(f"Error getting document link: {e}")
             raise
 
     def update_document_status(self, sinsei_code: str) -> bool:
@@ -414,19 +411,12 @@ class ITSEQService:
         }
 
         try:
-            # Step 1: Get document link (LNK1)
-            doc.sheet_url = self.sql_client.get_document_link(doc.sinsei_code) or ""
-            if doc.sheet_url:
-                result["steps"].append({"step": "get_link", "success": True})
-            else:
-                result["steps"].append({"step": "get_link", "success": False, "error": "No LNK1 found"})
-
-            # Step 2: Add to AppSheet
+            # Step 1: Add to AppSheet
             appsheet_result = self.appsheet_client.add_row(doc.to_appsheet_row())
             if appsheet_result["success"]:
                 result["steps"].append({"step": "add_to_appsheet", "success": True})
 
-                # Step 3: Update SQL Server (only if AppSheet was successful)
+                # Step 2: Update SQL Server (only if AppSheet was successful)
                 update_success = self.sql_client.update_document_status(doc.sinsei_code)
                 result["steps"].append({"step": "update_sql", "success": update_success})
 

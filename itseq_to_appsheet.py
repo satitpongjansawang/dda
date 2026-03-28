@@ -91,6 +91,7 @@ class Config:
     # Document search settings
     auto_no_chr: str = field(default_factory=lambda: os.getenv('ITSEQ_AUTO_NO_CHR', 'ITSEQ'))
     auto_no: str = field(default_factory=lambda: os.getenv('ITSEQ_AUTO_NO', ''))  # For recovery mode
+    start_date: str = field(default_factory=lambda: os.getenv('ITSEQ_START_DATE', ''))  # e.g. '2025-01-01'
 
     @property
     def db(self) -> DatabaseConfig:
@@ -211,6 +212,13 @@ class SQLServerClient:
             logger.info(f"Recovery mode: Searching for AUTO_NO = '{self.config.auto_no}'")
         else:
             # Normal mode: Search for approved documents
+            start_date_filter = ""
+            params = [self.config.auto_no_chr]
+
+            if self.config.start_date:
+                start_date_filter = "AND UPD_DATE >= ?"
+                params.append(self.config.start_date)
+
             query = f"""
                 SELECT TOP {limit} {select_columns}
                 FROM FLIISA.TR_SINSEI_DATA_HEADER
@@ -218,10 +226,12 @@ class SQLServerClient:
                     AND JOUTAI_KBN = 1
                     AND (DATEPART(SECOND, INS_DATE) != 0 OR DATEPART(MILLISECOND, INS_DATE) != 0)
                     AND (DATEPART(SECOND, UPD_DATE) != 0 OR DATEPART(MILLISECOND, UPD_DATE) != 0)
+                    {start_date_filter}
                 ORDER BY UPD_DATE ASC
             """
-            params = (self.config.auto_no_chr,)
-            logger.info(f"Normal mode: Searching for AUTO_NO_CHR = '{self.config.auto_no_chr}'")
+            params = tuple(params)
+            logger.info(f"Normal mode: Searching for AUTO_NO_CHR = '{self.config.auto_no_chr}'"
+                         f"{f', from {self.config.start_date}' if self.config.start_date else ''}")
 
         try:
             cursor = self.connection.cursor()

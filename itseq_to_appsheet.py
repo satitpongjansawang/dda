@@ -114,6 +114,9 @@ class ITSEQDocument:
     hakkou_syain_simei: str = ""  # HAKKOU_SYAIN_SIMEI -> AppSheet: applicant
     sinsei_syozoku_name: str = ""  # SINSEI_SYOZOKU_NAME -> AppSheet: placement
     syuyou_1: str = ""          # SYUYOU_1 -> AppSheet: subject
+    syuyou_2: str = ""          # SYUYOU_2 -> AppSheet: approval_route_code
+    syuyou_3: str = ""          # SYUYOU_3 -> AppSheet: company
+    auto_no_chr: str = ""       # AUTO_NO_CHR -> AppSheet: doc_code
     refer_url: str = ""         # Constructed URL -> AppSheet: url_05_refer
 
     # URL template for document reference
@@ -135,6 +138,9 @@ class ITSEQDocument:
             "applicant": self.hakkou_syain_simei,
             "placement": self.sinsei_syozoku_name,
             "subject": self.syuyou_1,
+            "approval_route_code": self.syuyou_2,
+            "company": self.syuyou_3,
+            "doc_code": self.auto_no_chr,
             "url_05_refer": self.refer_url,
         }
         return row
@@ -189,7 +195,10 @@ class SQLServerClient:
                 HAKKOU_SYAIN_NO,
                 HAKKOU_SYAIN_SIMEI,
                 SINSEI_SYOZOKU_NAME,
-                SYUYOU_1"""
+                SYUYOU_1,
+                SYUYOU_2,
+                SYUYOU_3,
+                AUTO_NO_CHR"""
 
         if self.config.auto_no:
             # Recovery mode: Search by exact document number
@@ -230,6 +239,9 @@ class SQLServerClient:
                     hakkou_syain_simei=row[3] or "",
                     sinsei_syozoku_name=row[4] or "",
                     syuyou_1=row[5] or "",
+                    syuyou_2=row[6] or "",
+                    syuyou_3=row[7] or "",
+                    auto_no_chr=row[8] or "",
                 )
                 doc.refer_url = doc.build_refer_url()
                 documents.append(doc)

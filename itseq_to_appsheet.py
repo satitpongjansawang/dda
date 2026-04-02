@@ -142,7 +142,7 @@ class ITSEQDocument:
             "approval_route_code": self.syuyou_2,
             "company": self.syuyou_3,
             "doc_code": self.auto_no_chr,
-            "url_05_refer": self.refer_url,
+            "subject_url": self.refer_url,
         }
         return row
 

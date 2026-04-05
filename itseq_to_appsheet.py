@@ -88,10 +88,15 @@ class Config:
         table_name=os.getenv('ITSEQ_APPSHEET_TABLE_NAME', 'mine_taskx'),
     ))
 
-    # Document search settings
-    auto_no_chr: str = field(default_factory=lambda: os.getenv('ITSEQ_AUTO_NO_CHR', 'ITSEQ'))
+    # Document search settings (comma-separated for multiple types, e.g. 'ITSEQ,ITQUO,APRTQ')
+    auto_no_chr_raw: str = field(default_factory=lambda: os.getenv('ITSEQ_AUTO_NO_CHR', 'ITSEQ'))
     auto_no: str = field(default_factory=lambda: os.getenv('ITSEQ_AUTO_NO', ''))  # For recovery mode
     start_date: str = field(default_factory=lambda: os.getenv('ITSEQ_START_DATE', ''))  # e.g. '2025-01-01'
+
+    @property
+    def auto_no_chr_list(self) -> List[str]:
+        """Parse comma-separated AUTO_NO_CHR into a list"""
+        return [x.strip() for x in self.auto_no_chr_raw.split(',') if x.strip()]
 
     @property
     def db(self) -> DatabaseConfig:
@@ -102,6 +107,7 @@ class Config:
         logger.info(f"Configuration loaded for environment: {self.environment.value}")
         logger.info(f"Database: {self.db.database} on {self.db.server}")
         logger.info(f"AppSheet table: {self.appsheet.table_name}")
+        logger.info(f"Document types: {self.auto_no_chr_list}")
 
 
 # ===================== DATA MODELS =====================
@@ -118,17 +124,20 @@ class ITSEQDocument:
     syuyou_2: str = ""          # SYUYOU_2 -> AppSheet: approval_route_code
     syuyou_3: str = ""          # SYUYOU_3 -> AppSheet: company
     auto_no_chr: str = ""       # AUTO_NO_CHR -> AppSheet: doc_code
-    refer_url: str = ""         # Constructed URL -> AppSheet: url_05_refer
+    refer_url: str = ""         # Constructed URL -> AppSheet: subject_url
 
-    # URL template for document reference
+    # URL template for document reference (SHD_SRI_CODE uses auto_no_chr dynamically)
     REFER_URL_TEMPLATE = (
         "http://dasy.niterraibcasia.com/DASY-FLII/ope/common/pdfprint.page"
-        "?pdfPrintKbn=0&POPUPKBN=1&SHD_SCD={sinsei_code}&SHD_SRI_CODE=ITSEQ&SHD_SRI_HAN=1"
+        "?pdfPrintKbn=0&POPUPKBN=1&SHD_SCD={sinsei_code}&SHD_SRI_CODE={auto_no_chr}&SHD_SRI_HAN=1"
     )
 
     def build_refer_url(self) -> str:
-        """Construct document reference URL from SINSEI_CODE"""
-        return self.REFER_URL_TEMPLATE.format(sinsei_code=self.sinsei_code)
+        """Construct document reference URL from SINSEI_CODE and AUTO_NO_CHR"""
+        return self.REFER_URL_TEMPLATE.format(
+            sinsei_code=self.sinsei_code,
+            auto_no_chr=self.auto_no_chr,
+        )
 
     def to_appsheet_row(self) -> Dict[str, Any]:
         """Convert to AppSheet row format for mine_taskx table"""
@@ -211,10 +220,12 @@ class SQLServerClient:
             params = (self.config.auto_no,)
             logger.info(f"Recovery mode: Searching for AUTO_NO = '{self.config.auto_no}'")
         else:
-            # Normal mode: Search for approved documents
-            start_date_filter = ""
-            params = [self.config.auto_no_chr]
+            # Normal mode: Search for approved documents (supports multiple AUTO_NO_CHR)
+            doc_types = self.config.auto_no_chr_list
+            placeholders = ','.join(['?'] * len(doc_types))
+            params = list(doc_types)
 
+            start_date_filter = ""
             if self.config.start_date:
                 start_date_filter = "AND UPD_DATE >= ?"
                 params.append(self.config.start_date)
@@ -222,7 +233,7 @@ class SQLServerClient:
             query = f"""
                 SELECT TOP {limit} {select_columns}
                 FROM FLIISA.TR_SINSEI_DATA_HEADER
-                WHERE AUTO_NO_CHR = ?
+                WHERE AUTO_NO_CHR IN ({placeholders})
                     AND JOUTAI_KBN = 1
                     AND (DATEPART(SECOND, INS_DATE) != 0 OR DATEPART(MILLISECOND, INS_DATE) != 0)
                     AND (DATEPART(SECOND, UPD_DATE) != 0 OR DATEPART(MILLISECOND, UPD_DATE) != 0)
@@ -230,7 +241,7 @@ class SQLServerClient:
                 ORDER BY UPD_DATE ASC
             """
             params = tuple(params)
-            logger.info(f"Normal mode: Searching for AUTO_NO_CHR = '{self.config.auto_no_chr}'"
+            logger.info(f"Normal mode: Searching for AUTO_NO_CHR IN {doc_types}"
                          f"{f', from {self.config.start_date}' if self.config.start_date else ''}")
 
         try:
@@ -473,7 +484,7 @@ class ITSEQService:
         logger.info("=" * 60)
         logger.info("Starting ITSEQ Processor")
         logger.info(f"Environment: {self.config.environment.value}")
-        logger.info(f"Document type: {self.config.auto_no_chr}")
+        logger.info(f"Document types: {self.config.auto_no_chr_list}")
         logger.info("=" * 60)
 
         try:

@@ -21,18 +21,18 @@ const CONFIG = {
   // ชื่อ sheet (tab) ใน Sheet ปลายทาง (Sheet ที่ script นี้อยู่)
   DEST_SHEET_NAME: 'Sheet1',
 
-  // คอลัมน์ที่เก็บสถานะ (A=1, B=2, C=3, ...)
-  STATUS_COLUMN_INDEX: 1,
+  // คอลัมน์ที่เก็บสถานะ — G = 7 (A=1, B=2, ..., G=7)
+  STATUS_COLUMN_INDEX: 7,
 
-  // ค่าสถานะที่ต้องการคัดลอก
-  STATUS_VALUE: 'Success',
+  // ค่าสถานะที่ต้องการคัดลอก (ตัวพิมพ์ใหญ่ตามต้นทาง)
+  STATUS_VALUE: 'SUCCESS',
 
-  // คอลัมน์ที่ใช้เป็น unique key เพื่อป้องกันข้อมูลซ้ำ (เช่น document number)
+  // คอลัมน์ที่ใช้เป็น unique key เพื่อป้องกันข้อมูลซ้ำ — A = 1 (Doc ID)
   // ตั้งเป็น 0 ถ้าไม่ต้องการตรวจสอบซ้ำ (จะใช้การเทียบแถวทั้งแถวแทน)
-  UNIQUE_KEY_COLUMN_INDEX: 0,
+  UNIQUE_KEY_COLUMN_INDEX: 1,
 
-  // จำนวนแถว header ใน Sheet ต้นทาง
-  HEADER_ROWS: 1,
+  // จำนวนแถว header ใน Sheet ต้นทาง (แถว 1 = ชื่อ Process, แถว 2 = ชื่อคอลัมน์)
+  HEADER_ROWS: 2,
 
   // คัดลอก header จากต้นทางมาปลายทางด้วยหรือไม่ (เฉพาะครั้งแรกที่ปลายทางว่าง)
   COPY_HEADER: true,

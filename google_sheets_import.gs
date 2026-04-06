@@ -36,6 +36,10 @@ const CONFIG = {
 
   // คัดลอก header จากต้นทางมาปลายทางด้วยหรือไม่ (เฉพาะครั้งแรกที่ปลายทางว่าง)
   COPY_HEADER: true,
+
+  // คอลัมน์ที่ต้องไม่ว่าง — ถ้าว่างจะข้ามแถวนั้น (ป้องกันข้อมูลไม่สมบูรณ์)
+  // ใส่หมายเลขคอลัมน์ (A=1, B=2, C=3, ...)
+  REQUIRED_COLUMNS: [1, 2, 3],  // Doc ID (A), Company (B), Doc Type (C)
 };
 // ================================================
 
@@ -77,6 +81,9 @@ function importSuccessRows() {
     const status = String(row[statusColIdx]).trim();
     if (status !== CONFIG.STATUS_VALUE) continue;
 
+    // ตรวจสอบว่าคอลัมน์ที่กำหนดว่าต้องมีข้อมูล ไม่ว่าง
+    if (!isRowComplete_(row)) continue;
+
     const key = buildRowKey_(row);
     if (existingKeys.has(key)) continue;
 
@@ -94,6 +101,20 @@ function importSuccessRows() {
   dest.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
 
   Logger.log('นำเข้าข้อมูลใหม่ ' + newRows.length + ' แถว เรียบร้อย');
+}
+
+/**
+ * ตรวจสอบว่าคอลัมน์ที่กำหนดใน REQUIRED_COLUMNS มีข้อมูลครบหรือไม่
+ * ป้องกันแถวที่ข้อมูลไม่สมบูรณ์ (เช่น ไม่มี Doc ID, Company, หรือ Doc Type)
+ */
+function isRowComplete_(row) {
+  for (const colIdx of CONFIG.REQUIRED_COLUMNS) {
+    const value = String(row[colIdx - 1]).trim();
+    if (value === '' || value === 'undefined' || value === 'null') {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
